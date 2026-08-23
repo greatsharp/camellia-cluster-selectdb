@@ -15,6 +15,7 @@ import com.netease.nim.camellia.redis.proxy.monitor.PasswordMaskUtils;
 import com.netease.nim.camellia.redis.proxy.reply.*;
 import com.netease.nim.camellia.redis.proxy.util.ErrorLogCollector;
 import com.netease.nim.camellia.redis.proxy.util.Utils;
+import com.netease.nim.camellia.tools.utils.CamelliaMapUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -125,6 +126,17 @@ public class RedisClusterSlotInfo {
     }
 
     /**
+     * get connection addr with db index
+     *
+     * @param node node
+     * @param db db index
+     * @return RedisConnectionAddr
+     */
+    public static RedisConnectionAddr addrWithDb(Node node, int db) {
+        return node.getAddr(db);
+    }
+
+    /**
      * get connection by slot
      *
      * @param slot slot
@@ -134,6 +146,42 @@ public class RedisClusterSlotInfo {
         Node node = getNode(slot);
         if (node == null) return null;
         return RedisConnectionHub.getInstance().get(redisClusterClient, node.getAddr());
+    }
+
+    /**
+     * get connection by slot and db index
+     *
+     * @param slot slot
+     * @param db db index
+     * @return connection
+     */
+    public RedisConnection getConnection(int slot, int db) {
+        Node node = getNode(slot);
+        if (node == null) return null;
+        return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(node, db));
+    }
+
+    /**
+     * get master node connection by slot
+     *
+     * @param slot slot
+     * @param db db index
+     * @return connection
+     */
+    public RedisConnection getMasterConnection(int slot, int db) {
+        Node node = getMasterNode(slot);
+        if (node == null) return null;
+        return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(node, db));
+    }
+
+    /**
+     * get master node by slot
+     *
+     * @param slot slot
+     * @return node
+     */
+    public Node getMasterNode(int slot) {
+        return masterSlotArray[slot];
     }
 
     /**
@@ -251,6 +299,61 @@ public class RedisClusterSlotInfo {
         } catch (Exception e) {
             ErrorLogCollector.collect(RedisClusterSlotInfo.class,
                     "getClientByIndex error, resource = " + maskUrl + ", index = " + index, e);
+            return null;
+        }
+    }
+
+    /**
+     * get client by index and db index, node list is sorted by url.
+     * @param index index
+     * @param db db index
+     * @return RedisClient
+     */
+    public RedisConnection getConnectionByIndex(int index, int db) {
+        try {
+            Node master = this.masterNodeList.get(index);
+            if (master == null) return null;
+            if (type == Type.MASTER_ONLY) {
+                return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(master, db));
+            } else if (type == Type.SLAVE_ONLY) {
+                List<Node> slaves = masterSlaveMap.get(master);
+                try {
+                    if (slaves == null || slaves.isEmpty()) {
+                        return null;
+                    }
+                    if (slaves.size() == 1) {
+                        Node slave = slaves.getFirst();
+                        return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(slave, db));
+                    } else {
+                        int i = ThreadLocalRandom.current().nextInt(slaves.size());
+                        Node slave = slaves.get(i);
+                        return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(slave, db));
+                    }
+                } catch (Exception e) {
+                    Node slave = slaves.getFirst();
+                    return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(slave, db));
+                }
+            } else if (type == Type.MASTER_SLAVE) {
+                try {
+                    List<Node> slaves = masterSlaveMap.get(master);
+                    if (slaves == null || slaves.isEmpty()) {
+                        return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(master, db));
+                    }
+                    int i = ThreadLocalRandom.current().nextInt(slaves.size() + 1);
+                    if (i == 0) {
+                        return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(master, db));
+                    }
+                    Node slave = slaves.get(i - 1);
+                    return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(slave, db));
+                } catch (Exception e) {
+                    return RedisConnectionHub.getInstance().get(redisClusterClient, addrWithDb(master, db));
+                }
+            } else {
+                return null;
+            }
+        } catch (Exception e) {
+            ErrorLogCollector.collect(RedisClusterSlotInfo.class,
+                    "getClientByIndex error, resource = " + maskUrl + ", index = " + index + ", db = " + db, e);
             return null;
         }
     }
@@ -591,6 +694,8 @@ public class RedisClusterSlotInfo {
         private final boolean readonly;
         private final RedisConnectionAddr addr;
 
+        private final ConcurrentHashMap<Integer, RedisConnectionAddr> addrDbCache = new ConcurrentHashMap<>();
+
         public Node(String host, int port, String userName, String password, boolean readonly) {
             this.host = host;
             this.port = port;
@@ -614,6 +719,14 @@ public class RedisClusterSlotInfo {
 
         public RedisConnectionAddr getAddr() {
             return addr;
+        }
+
+        public RedisConnectionAddr getAddr(int db) {
+            if (db <= 0 || this.addr.getDb() == db) {
+                return this.addr;
+            }
+            return CamelliaMapUtils.computeIfAbsent(addrDbCache, db,
+                    k -> new RedisConnectionAddr(host, port, userName, password, readonly, db, true));
         }
 
         public String getUserName() {

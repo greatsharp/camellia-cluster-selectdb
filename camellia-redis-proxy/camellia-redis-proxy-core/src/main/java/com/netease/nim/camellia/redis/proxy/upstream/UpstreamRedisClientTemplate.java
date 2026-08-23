@@ -700,10 +700,14 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
             }
         }
         boolean multiDBSupport = true;
+        // Valkey cluster模式支持多DB（参数cluster-databases配置），proxy可通过配置cluster.multidb.support=true来支持，默认false保证兼容。
+        boolean clusterMultiDBSupport = ProxyDynamicConf.getBoolean("cluster.multidb.support", bid, bgroup, false);
         for (Resource resource : resources) {
             if (resource.getUrl().startsWith(RedisType.RedisCluster.getPrefix())
-                    || resource.getUrl().startsWith(RedisType.RedisClusterSlaves.getPrefix())) {
-                multiDBSupport = false;
+                    || resource.getUrl().startsWith(RedisType.RedisClusterSlaves.getPrefix())
+                    || resource.getUrl().startsWith(RedisType.RedissCluster.getPrefix())
+                    || resource.getUrl().startsWith(RedisType.RedissClusterSlaves.getPrefix())) {
+                multiDBSupport = clusterMultiDBSupport;
                 break;
             }
         }
