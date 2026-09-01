@@ -20,11 +20,13 @@ public class RedissClusterResource extends Resource {
     private final List<RedisClusterResource.Node> nodes;
     private final String password;
     private final String userName;
+    private final int db;
 
-    public RedissClusterResource(List<RedisClusterResource.Node> nodes, String userName, String password) {
+    public RedissClusterResource(List<RedisClusterResource.Node> nodes, String userName, String password, int db) {
         this.nodes = nodes;
         this.password = password;
         this.userName = userName;
+        this.db = db;
         StringBuilder url = new StringBuilder();
         url.append(RedisType.RedissCluster.getPrefix());
         if (userName != null && password != null) {
@@ -38,8 +40,16 @@ public class RedissClusterResource extends Resource {
             url.append(",");
         }
         url.deleteCharAt(url.length() - 1);
+        if (db > 0) {
+            url.append("?db=").append(db);
+        }
         this.setUrl(url.toString());
     }
+
+    public RedissClusterResource(List<RedisClusterResource.Node> nodes, String userName, String password) {
+        this(nodes, userName, password, 0);
+    }
+
 
     public RedissClusterResource(List<RedisClusterResource.Node> nodes, String password) {
         this(nodes, null, password);
@@ -55,6 +65,10 @@ public class RedissClusterResource extends Resource {
 
     public String getUserName() {
         return userName;
+    }
+
+    public int getDb() {
+        return db;
     }
 
 }

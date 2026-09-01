@@ -48,6 +48,7 @@ public class RedisClusterClient implements IUpstreamClient {
     private final String url;
     private final String userName;
     private final String password;
+    private final int defaultDb;
 
     private Renew renew;
 
@@ -57,6 +58,7 @@ public class RedisClusterClient implements IUpstreamClient {
         this.url = resource.getUrl();
         this.userName = resource.getUserName();
         this.password = resource.getPassword();
+        this.defaultDb = resource.getDb();
         this.maxAttempts = maxAttempts;
         this.clusterSlotInfo = new RedisClusterSlotInfo(resource, this);
     }
@@ -67,6 +69,7 @@ public class RedisClusterClient implements IUpstreamClient {
         this.url = resource.getUrl();
         this.userName = resource.getUserName();
         this.password = resource.getPassword();
+        this.defaultDb = resource.getDb();
         this.maxAttempts = maxAttempts;
         this.clusterSlotInfo = new RedisClusterSlotInfo(resource, this);
     }
@@ -77,6 +80,7 @@ public class RedisClusterClient implements IUpstreamClient {
         this.url = resource.getUrl();
         this.userName = resource.getUserName();
         this.password = resource.getPassword();
+        this.defaultDb = resource.getDb();
         this.maxAttempts = maxAttempts;
         this.clusterSlotInfo = new RedisClusterSlotInfo(resource, this);
     }
@@ -87,6 +91,7 @@ public class RedisClusterClient implements IUpstreamClient {
         this.url = resource.getUrl();
         this.userName = resource.getUserName();
         this.password = resource.getPassword();
+        this.defaultDb = resource.getDb();
         this.maxAttempts = maxAttempts;
         this.clusterSlotInfo = new RedisClusterSlotInfo(resource, this);
     }
@@ -115,6 +120,13 @@ public class RedisClusterClient implements IUpstreamClient {
             logger.error("renew error, resource = {}", PasswordMaskUtils.maskResource(getResource()));
             return false;
         }
+    }
+
+    private int resolveDb(int db) {
+        if (db < 0 && defaultDb > 0) {
+            return defaultDb;
+        }
+        return db;
     }
 
 
@@ -152,6 +164,7 @@ public class RedisClusterClient implements IUpstreamClient {
     }
 
     public void sendCommand(int db, List<Command> commands, List<CompletableFuture<Reply>> futureList) {
+        db = resolveDb(db);
         if (logger.isDebugEnabled()) {
             List<String> commandNames = new ArrayList<>();
             for (Command command : commands) {
@@ -719,7 +732,7 @@ public class RedisClusterClient implements IUpstreamClient {
                             String log = "MOVED, command = " + command.getName() + ", keys = " + command.getKeysStr() + ", attempts = " + attempts;
                             ErrorLogCollector.collect(RedisClusterClient.class, log);
                             String[] strings = parseTargetHostAndSlot(error);
-                            int db = command.getChannelInfo().getDb();
+                            int db = clusterClient.resolveDb(command.getChannelInfo().getDb());
                             RedisConnectionAddr addr = new RedisConnectionAddr(strings[1], Integer.parseInt(strings[2]), clusterClient.userName, clusterClient.password, false, db, false);
                             if (command.isBlocking()) {
                                 RedisConnection redisConnection = command.getChannelInfo().tryAcquireBindRedisConnection(addr);
@@ -774,7 +787,7 @@ public class RedisClusterClient implements IUpstreamClient {
                             String log = "ASK, command = " + command.getName() + ", attempts = " + attempts;
                             ErrorLogCollector.collect(RedisClusterClient.class, log);
                             String[] strings = parseTargetHostAndSlot(error);
-                            int db = command.getChannelInfo().getDb();
+                            int db = clusterClient.resolveDb(command.getChannelInfo().getDb());
                             RedisConnectionAddr addr = new RedisConnectionAddr(strings[1], Integer.parseInt(strings[2]), clusterClient.userName, clusterClient.password, false, db, false);
                             if (command.isBlocking()) {
                                 RedisConnection redisConnection = command.getChannelInfo().tryAcquireBindRedisConnection(addr);

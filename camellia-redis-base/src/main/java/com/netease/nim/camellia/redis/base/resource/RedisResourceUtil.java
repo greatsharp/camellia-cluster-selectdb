@@ -154,17 +154,23 @@ public class RedisResourceUtil {
                     int port = Integer.parseInt(split1[1]);
                     nodeList.add(new RedisClusterResource.Node(ip, port));
                 }
+
+                Map<String, String> paramMap = getParamMap(substring);
+                int db = 0;
+                String dbStr = paramMap.get("db");
+                if (dbStr != null) {
+                    db = Integer.parseInt(dbStr);
+                }
+                if (db < 0) {
+                    throw new CamelliaRedisException("db should not be negative");
+                }
                 if (redisType == RedisType.RedisCluster) {
-                    RedisClusterResource redisClusterResource = new RedisClusterResource(nodeList, userName, password);
-                    if (!redisClusterResource.getUrl().equals(resource.getUrl())) {
-                        throw new CamelliaRedisException("resource url not equals");
-                    }
+                    RedisClusterResource redisClusterResource = new RedisClusterResource(nodeList, userName, password, db);
+                    checkUrl(redisClusterResource.getUrl(), resource.getUrl());
                     return redisClusterResource;
                 } else {
-                    RedissClusterResource redissClusterResource = new RedissClusterResource(nodeList, userName, password);
-                    if (!redissClusterResource.getUrl().equals(resource.getUrl())) {
-                        throw new CamelliaRedisException("resource url not equals");
-                    }
+                    RedissClusterResource redissClusterResource = new RedissClusterResource(nodeList, userName, password, db);
+                    checkUrl(redissClusterResource.getUrl(), resource.getUrl());
                     return redissClusterResource;
                 }
             } else if (redisType == RedisType.RedisSentinelSlaves || redisType == RedisType.RedissSentinelSlaves) {
@@ -266,10 +272,18 @@ public class RedisResourceUtil {
                     withMaster = Boolean.parseBoolean(withMasterStr);
                 }
 
+                int db = 0;
+                String dbStr = paramMap.get("db");
+                if (dbStr != null) {
+                    db = Integer.parseInt(dbStr);
+                }
+                if (db < 0) {
+                    throw new CamelliaRedisException("db should not be negative");
+                }
                 if (redisType == RedisType.RedisClusterSlaves) {
-                    return new RedisClusterSlavesResource(nodeList, userName, password, withMaster);
+                    return new RedisClusterSlavesResource(nodeList, userName, password, withMaster, db);
                 } else {
-                    return new RedissClusterSlavesResource(nodeList, userName, password, withMaster);
+                    return new RedissClusterSlavesResource(nodeList, userName, password, withMaster, db);
                 }
             } else if (redisType == RedisType.RedisProxies || redisType == RedisType.RedissProxies) {
                 String substring = url.substring(redisType.getPrefix().length());
@@ -388,6 +402,16 @@ public class RedisResourceUtil {
         } catch (Exception e) {
             throw new CamelliaRedisException(e);
         }
+    }
+
+    private static void checkUrl(String canonicalUrl, String rawUrl) {
+        if (canonicalUrl.equals(rawUrl)) {
+            return;
+        }
+        if (rawUrl.endsWith("?db=0") && canonicalUrl.equals(rawUrl.substring(0, rawUrl.length() - "?db=0".length()))) {
+            return;
+        }
+        throw new CamelliaRedisException("resource url not equals");
     }
 
     public static String getUrlWithoutQueryString(String url) {
