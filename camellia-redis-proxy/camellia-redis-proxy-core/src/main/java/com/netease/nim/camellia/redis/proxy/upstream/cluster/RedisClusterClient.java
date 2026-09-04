@@ -304,7 +304,7 @@ public class RedisClusterClient implements IUpstreamClient {
                 if (command.isBlocking()) {
                     blockingCommand(slot, command, commandFlusher, future, db);
                 } else {
-                    RedisConnection connection = getConnection(slot);
+                    RedisConnection connection = getConnection(slot, db);
                     CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, future, command);
                     commandFlusher.sendCommand(connection, command, futureWrapper);
                 }
