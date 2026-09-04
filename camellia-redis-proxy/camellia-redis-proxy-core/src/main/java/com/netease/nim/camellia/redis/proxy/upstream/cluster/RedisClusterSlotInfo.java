@@ -48,6 +48,9 @@ public class RedisClusterSlotInfo {
     private final List<RedisClusterResource.Node> nodes;
     private final String userName;
     private final String password;
+    private final ConcurrentLinkedHashMap<Integer, ConcurrentMap<Node, RedisConnectionAddr>> addrDbCache =
+            new ConcurrentLinkedHashMap.Builder<Integer, ConcurrentMap<Node, RedisConnectionAddr>>()
+                    .initialCapacity(16).maximumWeightedCapacity(128).build();
 
 
     public RedisClusterSlotInfo(RedisClusterResource resource, RedisClusterClient  redisClusterClient) {
@@ -132,8 +135,13 @@ public class RedisClusterSlotInfo {
      * @param db db index
      * @return RedisConnectionAddr
      */
-    public static RedisConnectionAddr addrWithDb(Node node, int db) {
-        return node.getAddr(db);
+    public RedisConnectionAddr addrWithDb(Node node, int db) {
+        if (db <= 0 || node.getAddr().getDb() == db) {
+            return node.getAddr();
+        }
+        ConcurrentMap<Node, RedisConnectionAddr> addrMap = addrDbCache.computeIfAbsent(db, k -> new ConcurrentHashMap<>());
+        return addrMap.computeIfAbsent(node,
+                k -> new RedisConnectionAddr(k.host, k.port, k.userName, k.password, k.readonly, db, true));
     }
 
     /**
@@ -568,6 +576,7 @@ public class RedisClusterSlotInfo {
             if (size > 0) {
                 this.masterSlotArray = masterSlotArray;
                 this.nodeWithSlavesArray = nodeWithSlavesArray;
+                this.addrDbCache.clear();
             }
             if (!success) {
                 logger.error("slot size is {}, not {}, resource = {}", size, SLOT_SIZE, maskUrl);
@@ -694,10 +703,6 @@ public class RedisClusterSlotInfo {
         private final boolean readonly;
         private final RedisConnectionAddr addr;
 
-        private final ConcurrentLinkedHashMap<Integer, RedisConnectionAddr> addrDbCache =
-                new ConcurrentLinkedHashMap.Builder<Integer, RedisConnectionAddr>()
-                        .initialCapacity(16).maximumWeightedCapacity(128).build();
-
         public Node(String host, int port, String userName, String password, boolean readonly) {
             this.host = host;
             this.port = port;
@@ -721,14 +726,6 @@ public class RedisClusterSlotInfo {
 
         public RedisConnectionAddr getAddr() {
             return addr;
-        }
-
-        public RedisConnectionAddr getAddr(int db) {
-            if (db <= 0 || this.addr.getDb() == db) {
-                return this.addr;
-            }
-            return addrDbCache.computeIfAbsent(db,
-                    k -> new RedisConnectionAddr(host, port, userName, password, readonly, db, true));
         }
 
         public String getUserName() {

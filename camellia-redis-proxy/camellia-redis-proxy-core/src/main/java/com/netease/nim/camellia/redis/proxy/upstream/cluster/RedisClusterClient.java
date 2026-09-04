@@ -239,7 +239,7 @@ public class RedisClusterClient implements IUpstreamClient {
                         continue;
                     }
                     RedisClusterSlotInfo.Node node = clusterSlotInfo.getMasterNode(slot);
-                    bindConnection = command.getChannelInfo().acquireBindRedisConnection(this, RedisClusterSlotInfo.addrWithDb(node, db));
+                    bindConnection = command.getChannelInfo().acquireBindRedisConnection(this, clusterSlotInfo.addrWithDb(node, db));
                     if (bindConnection == null) {
                         future.complete(ErrorReply.UPSTREAM_BIND_CONNECTION_NULL);
                         continue;
@@ -418,7 +418,7 @@ public class RedisClusterClient implements IUpstreamClient {
             }
             if (bindConnection == null) {
                 RedisClusterSlotInfo.Node node = clusterSlotInfo.getMasterNode(slot);
-                bindConnection = command.getChannelInfo().acquireBindRedisConnection(this, RedisClusterSlotInfo.addrWithDb(node, db));
+                bindConnection = command.getChannelInfo().acquireBindRedisConnection(this, clusterSlotInfo.addrWithDb(node, db));
                 channelInfo.setBindConnection(slot, bindConnection);
                 if (!commandFlusher.isEmpty()) {
                     commandFlusher.flush();
@@ -1033,7 +1033,7 @@ public class RedisClusterClient implements IUpstreamClient {
             future.complete(ErrorReply.UPSTREAM_CONNECTION_REDIS_CLUSTER_NODE_NULL);
             return;
         }
-        RedisConnection connection = command.getChannelInfo().acquireBindRedisConnection(this, RedisClusterSlotInfo.addrWithDb(node, db));
+        RedisConnection connection = command.getChannelInfo().acquireBindRedisConnection(this, clusterSlotInfo.addrWithDb(node, db));
         if (connection == null) {
             ErrorLogCollector.collect(RedisClusterClient.class, "blockingCommand bind connection null, node=" + node.getAddr() + " fail");
             future.complete(ErrorReply.UPSTREAM_BIND_CONNECTION_NULL);
