@@ -702,25 +702,18 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
 
         boolean multiDBSupport = true;
         // Valkey cluster模式支持多DB（参数cluster-databases配置），proxy可通过配置cluster.multidb.support=true来支持，默认false保证兼容。
-        boolean clusterMultiDBSupport = ProxyDynamicConf.getBoolean("cluster.multidb.support", bid, bgroup, false);
         boolean hasClusterResource = false;
-        boolean clusterResourceWithDb = false;
         for (Resource resource : resources) {
             if (resource.getUrl().startsWith(RedisType.RedisCluster.getPrefix())
                     || resource.getUrl().startsWith(RedisType.RedisClusterSlaves.getPrefix())
                     || resource.getUrl().startsWith(RedisType.RedissCluster.getPrefix())
                     || resource.getUrl().startsWith(RedisType.RedissClusterSlaves.getPrefix())) {
                 hasClusterResource = true;
-                if (hasPositiveDb(resource)) {
-                    clusterResourceWithDb = true;
-                    break;
-                }
+                break;
             }
         }
         if (hasClusterResource) {
-            // 资源URL显式配置?db>0时，说明后端cluster支持多DB
-            // 此时自动放开multiDBSupport，避免与cluster.multidb.support=false产生“默认db生效但select被拒绝"的矛盾
-            multiDBSupport = clusterMultiDBSupport || clusterResourceWithDb;
+            multiDBSupport = ProxyDynamicConf.getBoolean("cluster.multidb.support", bid, bgroup, false);
         }
         if ((multiDBSupport && !this.multiDBSupport) || (!multiDBSupport && this.multiDBSupport)) {
             if (logger.isInfoEnabled()) {
@@ -728,17 +721,6 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
                         bid, bgroup, this.multiDBSupport, multiDBSupport);
             }
             this.multiDBSupport = multiDBSupport;
-        }
-    }
-
-    private boolean hasPositiveDb(Resource resource) {
-        try {
-            Map<String, String> paramMap = RedisResourceUtil.getParamMap(resource.getUrl());
-            String dbStr = paramMap.get("db");
-            if (dbStr == null) return false;
-            return Integer.parseInt(dbStr) > 0;
-        } catch (Exception e) {
-            return false;
         }
     }
 
