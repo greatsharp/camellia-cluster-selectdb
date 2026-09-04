@@ -123,10 +123,7 @@ public class RedisClusterClient implements IUpstreamClient {
     }
 
     private int resolveDb(int db) {
-        if (db < 0 && defaultDb > 0) {
-            return defaultDb;
-        }
-        return db;
+        return db < 0 ? Math.max(defaultDb, 0) : db;
     }
 
 
