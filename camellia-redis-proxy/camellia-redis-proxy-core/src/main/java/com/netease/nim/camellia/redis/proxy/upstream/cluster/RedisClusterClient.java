@@ -183,7 +183,7 @@ public class RedisClusterClient implements IUpstreamClient {
                     int slot = RedisClusterCRC16Utils.getSlot(key);
                     RedisConnection connection = getConnection(slot, db);
                     if (connection != null) {
-                        connection.sendCommand(commands, Collections.singletonList(new CompletableFutureWrapper(this, futureList.getFirst(), command)));
+                        connection.sendCommand(commands, Collections.singletonList(new CompletableFutureWrapper(this, futureList.getFirst(), command, db)));
                         if (logger.isDebugEnabled()) {
                             logger.debug("sendCommand, command = {}, db = {}, key = {}, slot = {}", command.getName(), db, Utils.bytesToString(key), slot);
                         }
@@ -219,7 +219,7 @@ public class RedisClusterClient implements IUpstreamClient {
 
             if (redisCommand.getSupportType() == RedisCommand.CommandSupportType.PARTIALLY_SUPPORT_1) {
                 if (redisCommand.getCommandType() == RedisCommand.CommandType.PUB_SUB) {
-                    pubsub(command, future, channelInfo, commandFlusher, redisCommand, bindConnection);
+                    pubsub(command, future, channelInfo, commandFlusher, redisCommand, bindConnection, db);
                     continue;
                 }
             }
@@ -305,7 +305,7 @@ public class RedisClusterClient implements IUpstreamClient {
                     blockingCommand(slot, command, commandFlusher, future, db);
                 } else {
                     RedisConnection connection = getConnection(slot, db);
-                    CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, future, command);
+                    CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, future, command, db);
                     commandFlusher.sendCommand(connection, command, futureWrapper);
                 }
                 continue;
@@ -396,7 +396,7 @@ public class RedisClusterClient implements IUpstreamClient {
             if (logger.isDebugEnabled()) {
                 logger.debug("sendCommand, command = {}, db = {}, key = {}, slot = {}", command.getName(), db, Utils.bytesToString(key), slot);
             }
-            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, future, command);
+            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, future, command, db);
             commandFlusher.sendCommand(connection, command, futureWrapper);
         }
         commandFlusher.flush();
@@ -471,7 +471,7 @@ public class RedisClusterClient implements IUpstreamClient {
     }
 
     private void pubsub(Command command, CompletableFuture<Reply> future, ChannelInfo channelInfo, RedisConnectionCommandFlusher commandFlusher,
-                        RedisCommand redisCommand, RedisConnection bindConnection) {
+                        RedisCommand redisCommand, RedisConnection bindConnection, int db) {
         if (redisCommand == RedisCommand.SUBSCRIBE || redisCommand == RedisCommand.PSUBSCRIBE
                 || redisCommand == RedisCommand.SSUBSCRIBE) {
             if (bindConnection == null) {
@@ -536,7 +536,7 @@ public class RedisClusterClient implements IUpstreamClient {
             }
             RedisConnection connection = getConnection(targetSlot);
             if (connection != null) {
-                commandFlusher.sendCommand(connection, command, new CompletableFutureWrapper(this, future, command));
+                commandFlusher.sendCommand(connection, command, new CompletableFutureWrapper(this, future, command, db));
                 commandFlusher.flush();
             } else {
                 future.complete(ErrorReply.UPSTREAM_CONNECTION_NULL);
@@ -659,7 +659,7 @@ public class RedisClusterClient implements IUpstreamClient {
 
         CompletableFuture<Reply> completableFuture = new CompletableFuture<>();
         completableFuture.thenApply((reply) -> cursorCalculator.filterScanReply(reply, currentNodeIndex, clusterSlotInfo.getNodesSize())).thenAccept(future::complete);
-        CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, completableFuture, command);
+        CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, completableFuture, command, db);
         commandFlusher.sendCommand(redisConnection, command, futureWrapper);
     }
 
@@ -713,12 +713,14 @@ public class RedisClusterClient implements IUpstreamClient {
         private final RedisClusterClient clusterClient;
         private final CompletableFuture<Reply> future;
         private final Command command;
+        private final int db;
         private int attempts = 0;
 
-        CompletableFutureWrapper(RedisClusterClient clusterClient, CompletableFuture<Reply> future, Command command) {
+        CompletableFutureWrapper(RedisClusterClient clusterClient, CompletableFuture<Reply> future, Command command, int db) {
             this.clusterClient = clusterClient;
             this.future = future;
             this.command = command;
+            this.db = db;
         }
 
         public boolean complete(Reply reply) {
@@ -732,7 +734,6 @@ public class RedisClusterClient implements IUpstreamClient {
                             String log = "MOVED, command = " + command.getName() + ", keys = " + command.getKeysStr() + ", attempts = " + attempts;
                             ErrorLogCollector.collect(RedisClusterClient.class, log);
                             String[] strings = parseTargetHostAndSlot(error);
-                            int db = clusterClient.resolveDb(command.getChannelInfo().getDb());
                             RedisConnectionAddr addr = new RedisConnectionAddr(strings[1], Integer.parseInt(strings[2]), clusterClient.userName, clusterClient.password, false, db, false);
                             if (command.isBlocking()) {
                                 RedisConnection redisConnection = command.getChannelInfo().tryAcquireBindRedisConnection(addr);
@@ -787,7 +788,6 @@ public class RedisClusterClient implements IUpstreamClient {
                             String log = "ASK, command = " + command.getName() + ", attempts = " + attempts;
                             ErrorLogCollector.collect(RedisClusterClient.class, log);
                             String[] strings = parseTargetHostAndSlot(error);
-                            int db = clusterClient.resolveDb(command.getChannelInfo().getDb());
                             RedisConnectionAddr addr = new RedisConnectionAddr(strings[1], Integer.parseInt(strings[2]), clusterClient.userName, clusterClient.password, false, db, false);
                             if (command.isBlocking()) {
                                 RedisConnection redisConnection = command.getChannelInfo().tryAcquireBindRedisConnection(addr);
@@ -907,9 +907,8 @@ public class RedisClusterClient implements IUpstreamClient {
             int slot = RedisClusterCRC16Utils.getSlot(key);
             RedisConnection connection = getConnection(slot, db);
             Command subCommand = new Command(new byte[][]{RedisCommand.JSON_MGET.raw(), key, path});
-            subCommand.getChannelInfo().setDb(db);
             CompletableFuture<Reply> subFuture = new CompletableFuture<>();
-            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand);
+            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand, db);
             commandFlusher.sendCommand(connection, subCommand, futureWrapper);
             futureList.add(subFuture);
         }
@@ -946,10 +945,9 @@ public class RedisClusterClient implements IUpstreamClient {
             int slot = RedisClusterCRC16Utils.getSlot(key);
             RedisConnection connection = getConnection(slot, db);
             Command subCommand = new Command(new byte[][]{RedisCommand.GET.raw(), key});
-            subCommand.getChannelInfo().setDb(db);
 
             CompletableFuture<Reply> subFuture = new CompletableFuture<>();
-            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand);
+            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand, db);
             commandFlusher.sendCommand(connection, subCommand, futureWrapper);
             futureList.add(subFuture);
         }
@@ -991,10 +989,9 @@ public class RedisClusterClient implements IUpstreamClient {
             // set must work on master node
             RedisConnection connection = getMasterConnection(slot, db);
             Command subCommand = new Command(new byte[][]{RedisCommand.SET.raw(), key, value});
-            subCommand.getChannelInfo().setDb(db);
 
             CompletableFuture<Reply> subFuture = new CompletableFuture<>();
-            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand);
+            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand, db);
             commandFlusher.sendCommand(connection, subCommand, futureWrapper);
             futureList.add(subFuture);
         }
@@ -1014,10 +1011,9 @@ public class RedisClusterClient implements IUpstreamClient {
             int slot = RedisClusterCRC16Utils.getSlot(key);
             RedisConnection connection = getMasterConnection(slot, db);
             Command subCommand = new Command(new byte[][]{args[0], key});
-            subCommand.getChannelInfo().setDb(db);
 
             CompletableFuture<Reply> subFuture = new CompletableFuture<>();
-            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand);
+            CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, subFuture, subCommand, db);
             commandFlusher.sendCommand(connection, subCommand, futureWrapper);
             futureList.add(subFuture);
         }
@@ -1047,7 +1043,7 @@ public class RedisClusterClient implements IUpstreamClient {
             return;
         }
         commandFlusher.flush();
-        CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, future, command);
+        CompletableFutureWrapper futureWrapper = new CompletableFutureWrapper(this, future, command, db);
         connection.sendCommand(Collections.singletonList(command), Collections.singletonList(futureWrapper));
         connection.startIdleCheck();
     }
