@@ -15,6 +15,7 @@ import com.netease.nim.camellia.redis.proxy.upstream.uds.RedisUnixDomainSocketCl
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -35,6 +36,7 @@ public interface UpstreamRedisClientFactory {
 
         private final Object lock = new Object();
         private final ConcurrentHashMap<String, IUpstreamClient> map = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<String, String> urlAliasMap = new ConcurrentHashMap<>();
         private int maxAttempts = Constants.Upstream.redisClusterMaxAttempts;
 
         public Default() {
@@ -206,10 +208,10 @@ public interface UpstreamRedisClientFactory {
 
         @Override
         public IUpstreamClient get(String url) {
-            IUpstreamClient client = map.get(url);
+            IUpstreamClient client = getFromCache(url);
             if (client == null) {
                 synchronized (lock) {
-                    client = map.get(url);
+                    client = getFromCache(url);
                     if (client == null) {
                         Resource resource = RedisResourceUtil.parseResourceByUrl(new Resource(url));
                         if (resource instanceof RedisResource) {
@@ -247,15 +249,35 @@ public interface UpstreamRedisClientFactory {
                         } else {
                             throw new CamelliaRedisException("not support resource");
                         }
+                        String canonicalUrl = resource.getUrl();
+                        if (!url.equals(canonicalUrl)) {
+                            urlAliasMap.put(url, canonicalUrl);
+                        }
                     }
                 }
             }
             return client;
         }
 
+        private IUpstreamClient getFromCache(String url) {
+            IUpstreamClient client = map.get(url);
+            if (client != null) {
+                return client;
+            }
+            String canonicalUrl = urlAliasMap.get(url);
+            return canonicalUrl == null ? null : map.get(canonicalUrl);
+        }
+
         @Override
         public IUpstreamClient remove(String url) {
-            return map.remove(url);
+            String canonicalUrl = urlAliasMap.getOrDefault(url, url);
+            IUpstreamClient client = map.remove(canonicalUrl);
+            for (Map.Entry<String, String> entry : urlAliasMap.entrySet()) {
+                if (entry.getKey().equals(url) || entry.getValue().equals(canonicalUrl)) {
+                    urlAliasMap.remove(entry.getKey(), entry.getValue());
+                }
+            }
+            return client;
         }
 
         @Override

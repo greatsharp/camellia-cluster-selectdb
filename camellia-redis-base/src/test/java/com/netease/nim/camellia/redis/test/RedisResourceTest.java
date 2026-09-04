@@ -514,19 +514,22 @@ public class RedisResourceTest {
     }
 
     @Test
-    public void testClusterExplicitDbZero() {
+    public void testClusterExplicitDbZeroCanonicalized() {
         String[] urls = {
                 "redis-cluster://passwd@127.0.0.1:7000?db=0",
                 "rediss-cluster://passwd@127.0.0.1:7000?db=0",
                 "redis-cluster-slaves://passwd@127.0.0.1:7000?withMaster=false&db=0",
                 "rediss-cluster-slaves://passwd@127.0.0.1:7000?withMaster=false&db=0"
         };
-        for (String url : urls) {
-            try {
-                RedisResourceUtil.parseResourceByUrl(new Resource(url));
-                Assert.fail("explicit db=0 should be rejected, url=" + url);
-            } catch (CamelliaRedisException ignored) {
-            }
+        String[] canonicalUrls = {
+                "redis-cluster://passwd@127.0.0.1:7000",
+                "rediss-cluster://passwd@127.0.0.1:7000",
+                "redis-cluster-slaves://passwd@127.0.0.1:7000?withMaster=false",
+                "rediss-cluster-slaves://passwd@127.0.0.1:7000?withMaster=false"
+        };
+        for (int i = 0; i < urls.length; i++) {
+            Resource resource = RedisResourceUtil.parseResourceByUrl(new Resource(urls[i]));
+            Assert.assertEquals(canonicalUrls[i], resource.getUrl());
         }
     }
 

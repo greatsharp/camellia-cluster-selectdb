@@ -160,21 +160,14 @@ public class RedisResourceUtil {
                 String dbStr = paramMap.get("db");
                 if (dbStr != null) {
                     db = Integer.parseInt(dbStr);
-                    if (db == 0) {
-                        throw new CamelliaRedisException("db=0 should be omitted");
-                    }
                 }
                 if (db < 0) {
                     throw new CamelliaRedisException("db should not be negative");
                 }
                 if (redisType == RedisType.RedisCluster) {
-                    RedisClusterResource redisClusterResource = new RedisClusterResource(nodeList, userName, password, db);
-                    checkUrl(redisClusterResource.getUrl(), resource.getUrl());
-                    return redisClusterResource;
+                    return new RedisClusterResource(nodeList, userName, password, db);
                 } else {
-                    RedissClusterResource redissClusterResource = new RedissClusterResource(nodeList, userName, password, db);
-                    checkUrl(redissClusterResource.getUrl(), resource.getUrl());
-                    return redissClusterResource;
+                    return new RedissClusterResource(nodeList, userName, password, db);
                 }
             } else if (redisType == RedisType.RedisSentinelSlaves || redisType == RedisType.RedissSentinelSlaves) {
                 String substring = url.substring(redisType.getPrefix().length());
@@ -279,9 +272,6 @@ public class RedisResourceUtil {
                 String dbStr = paramMap.get("db");
                 if (dbStr != null) {
                     db = Integer.parseInt(dbStr);
-                    if (db == 0) {
-                        throw new CamelliaRedisException("db=0 should be omitted");
-                    }
                 }
                 if (db < 0) {
                     throw new CamelliaRedisException("db should not be negative");
@@ -407,12 +397,6 @@ public class RedisResourceUtil {
             throw e;
         } catch (Exception e) {
             throw new CamelliaRedisException(e);
-        }
-    }
-
-    private static void checkUrl(String canonicalUrl, String rawUrl) {
-        if (!canonicalUrl.equals(rawUrl)) {
-            throw new CamelliaRedisException("resource url not equals");
         }
     }
 
