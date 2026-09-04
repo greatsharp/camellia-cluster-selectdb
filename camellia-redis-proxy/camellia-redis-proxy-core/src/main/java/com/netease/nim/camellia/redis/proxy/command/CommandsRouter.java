@@ -306,6 +306,8 @@ public class CommandsRouter {
                                 IUpstreamClientTemplate template = factory.tryGet(channelInfo.getBid(), channelInfo.getBgroup());
                                 if (template != null && !template.isMultiDBSupport() && db != 0) {
                                     task.replyCompleted(ErrorReply.DB_INDEX_OUT_OF_RANGE);
+                                } else if (isDbChangeNotAllowed(channelInfo, db)) {
+                                    task.replyCompleted(ErrorReply.DB_CHANGE_NOT_ALLOWED);
                                 } else {
                                     //需要把之前db的命令先发出去
                                     if (!tasks.isEmpty() && channelInfo.getDb() != db) {
@@ -584,6 +586,13 @@ public class CommandsRouter {
         } catch (Exception e) {
             ErrorLogCollector.collect(CommandsRouter.class, "flush0 commands error", e);
         }
+    }
+
+    static boolean isDbChangeNotAllowed(ChannelInfo channelInfo, int db) {
+        if (channelInfo.isInTransaction() && channelInfo.getDb() != db) {
+            return true;
+        }
+        return channelInfo.getBindConnection() != null && channelInfo.getBindConnection().getAddr().getDb() != db;
     }
 
     private Reply cportAuth(Command command) {
