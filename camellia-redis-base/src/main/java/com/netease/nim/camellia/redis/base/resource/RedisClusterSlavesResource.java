@@ -19,12 +19,14 @@ public class RedisClusterSlavesResource extends Resource {
     private final String password;
     private final boolean withMaster;
     private final String userName;
+    private final int db;
 
-    public RedisClusterSlavesResource(List<RedisClusterResource.Node> nodes, String userName, String password, boolean withMaster) {
+    public RedisClusterSlavesResource(List<RedisClusterResource.Node> nodes, String userName, String password, boolean withMaster, int db) {
         this.nodes = nodes;
         this.password = password;
         this.withMaster = withMaster;
         this.userName = userName;
+        this.db = db;
         StringBuilder url = new StringBuilder();
         url.append(RedisType.RedisClusterSlaves.getPrefix());
         if (userName != null && password != null) {
@@ -39,7 +41,14 @@ public class RedisClusterSlavesResource extends Resource {
         }
         url.deleteCharAt(url.length() - 1);
         url.append("?withMaster=").append(withMaster);
+        if (db > 0) {
+            url.append("&db=").append(db);
+        }
         this.setUrl(url.toString());
+    }
+
+    public RedisClusterSlavesResource(List<RedisClusterResource.Node> nodes, String userName, String password, boolean withMaster) {
+        this(nodes, userName, password, withMaster, 0);
     }
 
     public List<RedisClusterResource.Node> getNodes() {
@@ -56,5 +65,9 @@ public class RedisClusterSlavesResource extends Resource {
 
     public String getUserName() {
         return userName;
+    }
+
+    public int getDb() {
+        return db;
     }
 }
