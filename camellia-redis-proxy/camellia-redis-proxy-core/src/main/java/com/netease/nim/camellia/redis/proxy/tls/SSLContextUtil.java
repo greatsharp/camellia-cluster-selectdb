@@ -14,7 +14,9 @@ import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
@@ -94,6 +96,38 @@ public class SSLContextUtil {
             kmf.init(ks, pass);
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
+            return context;
+        } catch (Exception e) {
+            throw new IllegalArgumentException(e);
+        }
+    }
+
+    /**
+     * Generate an SSLContext that trusts all certificates, i.e. does not verify the server certificate (insecure mode).
+     * Suitable for scenarios where the backend redis uses self-signed certificates and no trusted CA is available.
+     */
+    public static SSLContext genInsecureSSLContext() {
+        try {
+            TrustManager[] trustAllCerts = new TrustManager[]{
+                    new X509TrustManager() {
+                        @Override
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                            // trust all
+                        }
+
+                        @Override
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                            // trust all
+                        }
+
+                        @Override
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return new X509Certificate[0];
+                        }
+                    }
+            };
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(null, trustAllCerts, new SecureRandom());
             return context;
         } catch (Exception e) {
             throw new IllegalArgumentException(e);

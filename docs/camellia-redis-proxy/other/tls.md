@@ -107,3 +107,12 @@ public interface UpstreamTlsProvider {
 ```properties
 upstream.tls.provider.class.name=com.netease.nim.camellia.redis.proxy.tls.upstream.DefaultUpstreamTlsProvider
 ```
+
+#### insecure模式（跳过证书校验）
+
+* 当后端redis使用自签名证书，且proxy侧不提供（或无法提供）可信CA证书时，可以开启insecure模式，即不校验后端redis的服务端证书
+* 只需将upstream的tls provider切换为`InsecureUpstreamTlsProvider`即可，无需再配置ca/cert/key等证书路径
+```properties
+upstream.tls.provider.class.name=com.netease.nim.camellia.redis.proxy.tls.upstream.InsecureUpstreamTlsProvider
+```
+* 注意：insecure模式仅信任所有证书，不校验证书链和主机名，存在中间人攻击风险，请仅在可信网络环境中使用
