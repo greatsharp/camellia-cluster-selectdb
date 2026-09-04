@@ -15,7 +15,7 @@ import com.netease.nim.camellia.redis.proxy.monitor.PasswordMaskUtils;
 import com.netease.nim.camellia.redis.proxy.reply.*;
 import com.netease.nim.camellia.redis.proxy.util.ErrorLogCollector;
 import com.netease.nim.camellia.redis.proxy.util.Utils;
-import com.netease.nim.camellia.tools.utils.CamelliaMapUtils;
+import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -694,7 +694,9 @@ public class RedisClusterSlotInfo {
         private final boolean readonly;
         private final RedisConnectionAddr addr;
 
-        private final ConcurrentHashMap<Integer, RedisConnectionAddr> addrDbCache = new ConcurrentHashMap<>();
+        private final ConcurrentLinkedHashMap<Integer, RedisConnectionAddr> addrDbCache =
+                new ConcurrentLinkedHashMap.Builder<Integer, RedisConnectionAddr>()
+                        .initialCapacity(16).maximumWeightedCapacity(128).build();
 
         public Node(String host, int port, String userName, String password, boolean readonly) {
             this.host = host;
@@ -725,7 +727,7 @@ public class RedisClusterSlotInfo {
             if (db <= 0 || this.addr.getDb() == db) {
                 return this.addr;
             }
-            return CamelliaMapUtils.computeIfAbsent(addrDbCache, db,
+            return addrDbCache.computeIfAbsent(db,
                     k -> new RedisConnectionAddr(host, port, userName, password, readonly, db, true));
         }
 
