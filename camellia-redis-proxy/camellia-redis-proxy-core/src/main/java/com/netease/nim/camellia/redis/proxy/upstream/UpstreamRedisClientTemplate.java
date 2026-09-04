@@ -52,7 +52,8 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
 
     private final RedisProxyEnv env;
     private ResourceSelector resourceSelector;
-    private boolean multiDBSupport;
+    private volatile boolean multiDBSupport;
+    private volatile boolean hasClusterResource;
 
     private ProxyRouteType proxyRouteType;
     private IUpstreamClient singletonClient;
@@ -78,6 +79,7 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
             }
         }
     };
+    private final DynamicConfCallback multiDBSupportCallback = this::reloadMultiDBSupport;
 
     public UpstreamRedisClientTemplate(RedisProxyEnv env, ResourceTable resourceTable) {
         this.env = env;
@@ -90,6 +92,7 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
         ProxyDynamicConf.registerCallback(multiWriteModeCallback);
         RedisResourceUtil.checkResourceTable(resourceTable);
         this.update(resourceTable);
+        ProxyDynamicConf.registerCallback(multiDBSupportCallback);
         if (logger.isInfoEnabled()) {
             logger.info("UpstreamRedisClientTemplate init success, resourceTable = {}", ReadableResourceTableUtil.readableResourceTable(PasswordMaskUtils.maskResourceTable(resourceTable)));
         }
@@ -112,6 +115,7 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
         }
         RedisResourceUtil.checkResourceTable(resourceTable);
         this.update(resourceTable);
+        ProxyDynamicConf.registerCallback(multiDBSupportCallback);
         if (logger.isInfoEnabled()) {
             logger.info("UpstreamRedisClientTemplate init success, bid = {}, bgroup = {}, resourceTable = {}, ProxyRouteConfUpdater = {}", bid, bgroup,
                     ReadableResourceTableUtil.readableResourceTable(PasswordMaskUtils.maskResourceTable(resourceTable)), provider.getClass().getName());
@@ -700,7 +704,6 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
             }
         }
 
-        boolean multiDBSupport = true;
         // Valkey cluster模式支持多DB（参数cluster-databases配置），proxy可通过配置cluster.multidb.support=true来支持，默认false保证兼容。
         boolean hasClusterResource = false;
         for (Resource resource : resources) {
@@ -712,12 +715,16 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
                 break;
             }
         }
-        if (hasClusterResource) {
-            multiDBSupport = ProxyDynamicConf.getBoolean("cluster.multidb.support", bid, bgroup, false);
-        }
+        this.hasClusterResource = hasClusterResource;
+        reloadMultiDBSupport();
+    }
+
+    private void reloadMultiDBSupport() {
+        boolean multiDBSupport = !hasClusterResource
+                || ProxyDynamicConf.getBoolean("cluster.multidb.support", bid, bgroup, false);
         if ((multiDBSupport && !this.multiDBSupport) || (!multiDBSupport && this.multiDBSupport)) {
             if (logger.isInfoEnabled()) {
-                logger.info("multiDBSupport update for route conf update, bid = {}, bgroup = {}, multiDBSupport = {}->{}",
+                logger.info("multiDBSupport update, bid = {}, bgroup = {}, multiDBSupport = {}->{}",
                         bid, bgroup, this.multiDBSupport, multiDBSupport);
             }
             this.multiDBSupport = multiDBSupport;
@@ -735,6 +742,7 @@ public class UpstreamRedisClientTemplate implements IUpstreamRedisClientTemplate
             RouteConfMonitor.deregisterRedisClientTemplate(bid, bgroup);
         }
         ProxyDynamicConf.deregisterCallback(multiWriteModeCallback);
+        ProxyDynamicConf.deregisterCallback(multiDBSupportCallback);
         if (logger.isInfoEnabled()) {
             logger.info("UpstreamRedisClientTemplate shutdown, bid = {}, bgroup = {}", bid, bgroup);
         }
