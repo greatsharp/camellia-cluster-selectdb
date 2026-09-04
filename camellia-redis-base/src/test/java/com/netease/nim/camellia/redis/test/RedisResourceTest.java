@@ -513,6 +513,23 @@ public class RedisResourceTest {
         RedisResourceUtil.parseResourceByUrl(new Resource("redis-cluster://127.0.0.1:7000,127.0.0.1:7001"));
     }
 
+    @Test
+    public void testClusterExplicitDbZero() {
+        String[] urls = {
+                "redis-cluster://passwd@127.0.0.1:7000?db=0",
+                "rediss-cluster://passwd@127.0.0.1:7000?db=0",
+                "redis-cluster-slaves://passwd@127.0.0.1:7000?withMaster=false&db=0",
+                "rediss-cluster-slaves://passwd@127.0.0.1:7000?withMaster=false&db=0"
+        };
+        for (String url : urls) {
+            try {
+                RedisResourceUtil.parseResourceByUrl(new Resource(url));
+                Assert.fail("explicit db=0 should be rejected, url=" + url);
+            } catch (CamelliaRedisException ignored) {
+            }
+        }
+    }
+
     @Test(expected = CamelliaRedisException.class)
     public void testInvalidSentinelSSL() {
         RedisResourceUtil.parseResourceByUrl(new Resource("redis-sentinel://passwd@127.0.0.1:26379/mymaster?sentinelSSL=invalid"));

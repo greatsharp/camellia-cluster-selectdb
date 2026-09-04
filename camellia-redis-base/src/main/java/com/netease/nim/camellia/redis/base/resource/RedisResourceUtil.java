@@ -160,6 +160,9 @@ public class RedisResourceUtil {
                 String dbStr = paramMap.get("db");
                 if (dbStr != null) {
                     db = Integer.parseInt(dbStr);
+                    if (db == 0) {
+                        throw new CamelliaRedisException("db=0 should be omitted");
+                    }
                 }
                 if (db < 0) {
                     throw new CamelliaRedisException("db should not be negative");
@@ -276,6 +279,9 @@ public class RedisResourceUtil {
                 String dbStr = paramMap.get("db");
                 if (dbStr != null) {
                     db = Integer.parseInt(dbStr);
+                    if (db == 0) {
+                        throw new CamelliaRedisException("db=0 should be omitted");
+                    }
                 }
                 if (db < 0) {
                     throw new CamelliaRedisException("db should not be negative");
@@ -405,13 +411,9 @@ public class RedisResourceUtil {
     }
 
     private static void checkUrl(String canonicalUrl, String rawUrl) {
-        if (canonicalUrl.equals(rawUrl)) {
-            return;
+        if (!canonicalUrl.equals(rawUrl)) {
+            throw new CamelliaRedisException("resource url not equals");
         }
-        if (rawUrl.endsWith("?db=0") && canonicalUrl.equals(rawUrl.substring(0, rawUrl.length() - "?db=0".length()))) {
-            return;
-        }
-        throw new CamelliaRedisException("resource url not equals");
     }
 
     public static String getUrlWithoutQueryString(String url) {
